@@ -1,21 +1,23 @@
+// Standard project-wide include
 #include "std_include.h"
 
+// CUDA headers
 #include "cuda_runtime.h"
 #include "cuda_profiler_api.h"
 
-
+// Project-specific headers
 #include "Simulation.h"
 #include "voronoiQuadraticEnergy.h"
-#include "NoseHooverChainNVT.h"
+#include "selfPropelledParticleDynamics.h"
 #include "simpleVoronoiDatabase.h"
 #include "logEquilibrationStateWriter.h"
 #include "analysisPackage.h"
 
-
 /*!
-This file compiles to produce an executable that can be used to reproduce the timing information
-in the main cellGPU paper. It sets up a simulation that takes control of a voronoi model and a simple
-model of active motility
+This file sets up a simulation of a 2D Voronoi model with self-propelled particles,
+using log-spaced time sampling for saving simulation states. It is based on voronoi.cpp,
+but uses selfPropelledParticleDynamics instead of a Nose-Hoover thermostat.
+
 NOTE that in the output, the forces and the positions are not, by default, synchronized! The NcFile
 records the force from the last time "computeForces()" was called, and generally the equations of motion will 
 move the positions. If you want the forces and the positions to be sync'ed, you should call the
@@ -33,11 +35,11 @@ int main(int argc, char*argv[])
     double dt = 0.01; //the time step size
     double p0 = 3.8;  //the preferred perimeter
     double a0 = 1.0;  // the preferred area
-    double T = 0.1;  // the temperature
-    int Nchain = 4;     //The number of thermostats to chain together
+    double v0 = 0.05; // the self-propulsion speed
+    double Dr = 1.0;  // the rotational diffusion constant
 
     //The defaults can be overridden from the command line
-    while((c=getopt(argc,argv,"n:g:m:s:r:a:i:v:b:x:y:z:p:t:e:")) != -1)
+    while((c=getopt(argc,argv,"n:t:g:i:e:p:a:v:d:")) != -1)
         switch(c)
         {
             case 'n': numpts = atoi(optarg); break;
@@ -47,7 +49,8 @@ int main(int argc, char*argv[])
             case 'e': dt = atof(optarg); break;
             case 'p': p0 = atof(optarg); break;
             case 'a': a0 = atof(optarg); break;
-            case 'v': T = atof(optarg); break;
+            case 'v': v0 = atof(optarg); break;
+            case 'd': Dr = atof(optarg); break;
             case '?':
                     if(optopt=='c')
                         std::cerr<<"Option -" << optopt << "requires an argument.\n";
@@ -77,29 +80,29 @@ int main(int argc, char*argv[])
     //offsets.push_back(100);offsets.push_back(1000);offsets.push_back(50);
     for(int ii = 0; ii < offsets.size(); ++ii)
         {
-        sprintf(dataname,"test_N%i_p%.5f_T%.8f_et%.6f.nc",numpts,p0,T,offsets[ii]*dt);
+        sprintf(dataname,"test_N%i_p%.3f_a_bimodal_v%.3f_Dr%.3f_dt%.4f_et%.6f.nc",numpts,p0,v0,Dr,dt,offsets[ii]*dt);
         shared_ptr<simpleVoronoiDatabase> ncdat=make_shared<simpleVoronoiDatabase>(numpts,dataname,fileMode::replace);
         lewriter.addDatabase(ncdat,offsets[ii]);
         }
     lewriter.identifyNextFrame();
 
 
-    cout << "initializing a system of " << numpts << " cells at temperature " << T << endl;
-    shared_ptr<NoseHooverChainNVT> nvt = make_shared<NoseHooverChainNVT>(numpts,Nchain,initializeGPU);
+    cout << "initializing a system of " << numpts << " self-propelled cells with v0 = " << v0 << ", Dr = " << Dr << endl;
+    shared_ptr<selfPropelledParticleDynamics> spp = make_shared<selfPropelledParticleDynamics>(numpts);
 
     //define a voronoi configuration with a quadratic energy functional
     shared_ptr<VoronoiQuadraticEnergy> voronoiModel  = make_shared<VoronoiQuadraticEnergy>(numpts,1.0,4.0,reproducible,initializeGPU);
 
-    //set the cell preferences to uniformly have A_0 = 1, P_0 = p_0
-    voronoiModel->setCellPreferencesWithRandomAreas(p0,0.8,1.2);
+    //set the cell preferences to have a target p0, and a_0 chosen from a list
+    voronoiModel->setCellPreferencesWithRandomAreaList(p0,{0.8, 1.2});
 
-    voronoiModel->setCellVelocitiesMaxwellBoltzmann(T);
-    nvt->setT(T);
+    //set the activity of the cells
+    voronoiModel->setv0Dr(v0,Dr);
 
     //combine the equation of motion and the cell configuration in a "Simulation"
     SimulationPtr sim = make_shared<Simulation>();
     sim->setConfiguration(voronoiModel);
-    sim->addUpdater(nvt,voronoiModel);
+    sim->addUpdater(spp,voronoiModel);
     //set the time step size
     sim->setIntegrationTimestep(dt);
     //initialize Hilbert-curve sorting... can be turned off by commenting out this line or seting the argument to a negative number

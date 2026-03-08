@@ -94,6 +94,28 @@ void Simple2DCell::setCellPreferencesWithRandomAreas(double p0, double aMin,doub
     };
 
 /*!
+choose a target p_0, randomly distribute target a_0s from a list of possibilities
+*/
+void Simple2DCell::setCellPreferencesWithRandomAreaList(double p0, const vector<double> &areaList)
+    {
+    AreaPeriPreferences.resize(Ncells);
+    ArrayHandle<double2> h_p(AreaPeriPreferences,access_location::host,access_mode::overwrite);
+    if (areaList.empty())
+        {
+        //Or throw an error...
+        throw std::invalid_argument("areaList cannot be empty");
+        return;
+        }
+    for (int ii = 0; ii < Ncells; ++ii)
+        {
+        int randomIndex = floor(noise.getRealUniform(0,areaList.size()));
+        double a = areaList[randomIndex];
+        h_p.data[ii].x = a;
+        h_p.data[ii].y = p0 * sqrt(a);
+        };
+    };
+
+/*!
 Set the Area and Perimeter preferences to the input vector
 */
 void Simple2DCell::setCellPreferences(vector<double2> &APPref)

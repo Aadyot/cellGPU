@@ -69,6 +69,9 @@ class Simple2DCell : public Simple2DModel
         //!Set a uniform target p_0, random a_{0,i} in some range, and p_{0,i}=p_0\sqrt{a_{0,i}} 
         void setCellPreferencesWithRandomAreas(double p0, double aMin = 0.8, double aMax = 1.2);
 
+        //!Set a uniform target p_0, and randomly pick a_{0,i} for each cell from a list of options
+        void setCellPreferencesWithRandomAreaList(double p0, const vector<double> &areaList);
+
         //!Set cell area and perimeter preferences according to input vector
         void setCellPreferences(vector<double2> &AreaPeriPreferences);
 

@@ -88,6 +88,7 @@ set(HEADERS
 foreach(ARG
         voronoi
         Vertex
+        voronoiSP
         )
 add_executable("${ARG}.out" "${ARG}.cpp" )
 target_link_libraries("${ARG}.out"
