@@ -1,5 +1,6 @@
 // Standard project-wide include
 #include "std_include.h"
+#include <random>
 
 // CUDA headers
 #include "cuda_runtime.h"
@@ -31,6 +32,7 @@ int main(int argc, char*argv[])
     int c;
     int tSteps = 5; //number of time steps to run after initialization
     int initSteps = 1; //number of initialization steps
+    int reproducible_flag = 1; // 1 for reproducible, 0 for random
 
     double dt = 0.01; //the time step size
     double p0 = 3.8;  //the preferred perimeter
@@ -39,7 +41,7 @@ int main(int argc, char*argv[])
     double Dr = 1.0;  // the rotational diffusion constant
 
     //The defaults can be overridden from the command line
-    while((c=getopt(argc,argv,"n:t:g:i:e:p:a:v:d:")) != -1)
+    while((c=getopt(argc,argv,"n:t:g:i:e:p:a:v:d:r:")) != -1)
         switch(c)
         {
             case 'n': numpts = atoi(optarg); break;
@@ -51,6 +53,7 @@ int main(int argc, char*argv[])
             case 'a': a0 = atof(optarg); break;
             case 'v': v0 = atof(optarg); break;
             case 'd': Dr = atof(optarg); break;
+            case 'r': reproducible_flag = atoi(optarg); break;
             case '?':
                     if(optopt=='c')
                         std::cerr<<"Option -" << optopt << "requires an argument.\n";
@@ -63,8 +66,9 @@ int main(int argc, char*argv[])
                        abort();
         };
 
+    bool reproducible = (reproducible_flag == 1);
+
     clock_t t1,t2; //clocks for timing information
-    bool reproducible = true; // if you want random numbers with a more random seed each run, set this to false
     //check to see if we should run on a GPU
     bool initializeGPU = true;
     bool gpu = chooseGPU(USE_GPU);
@@ -80,7 +84,13 @@ int main(int argc, char*argv[])
     //offsets.push_back(100);offsets.push_back(1000);offsets.push_back(50);
     for(int ii = 0; ii < offsets.size(); ++ii)
         {
-        sprintf(dataname,"test_N%i_p%.3f_a_bimodal_v%.3f_Dr%.3f_dt%.4f_et%.6f.nc",numpts,p0,v0,Dr,dt,offsets[ii]*dt);
+        if(reproducible)
+            sprintf(dataname,"test_N%i_p%.3f_a_bimodal_v%.3f_Dr%.3f_dt%.4f_repro_et%.6f.nc",numpts,p0,v0,Dr,dt,offsets[ii]*dt);
+        else
+            {
+            std::random_device rd;
+            sprintf(dataname,"test_N%i_p%.3f_a_bimodal_v%.3f_Dr%.3f_dt%.4f_rand%u_et%.6f.nc",numpts,p0,v0,Dr,dt,rd(),offsets[ii]*dt);
+            }
         shared_ptr<simpleVoronoiDatabase> ncdat=make_shared<simpleVoronoiDatabase>(numpts,dataname,fileMode::replace);
         lewriter.addDatabase(ncdat,offsets[ii]);
         }
